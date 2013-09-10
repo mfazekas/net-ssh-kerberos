@@ -23,6 +23,11 @@ With bundler, add the following lines to Gemfile.
 
 ```
   gem 'net-ssh', :require => 'net/ssh'
+  
+  # for ruby <~ 1.8.7
+  gem 'net-ssh-kerberos', :git => 'https://github.com/Lax/net-ssh-kerberos.git', :branch => 'master', :require => 'net/ssh/kerberos'
+
+  # for ruby ~> 1.9.1
   gem 'net-ssh-krb', :git => 'https://github.com/Lax/net-ssh-kerberos.git', :branch => 'gssapi', :require => 'net/ssh/kerberos'
 ```
 
