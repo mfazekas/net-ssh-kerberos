@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{net-ssh-krb}
-  s.version = "0.3.0"
+  s.version = "0.4.0"
   s.authors = ["Joe Khoobyar", "Chris Beer"]
   s.description = %q{Extends Net::SSH by adding Kerberos authentication capability for password-less logins on multiple platforms.
 }
@@ -17,7 +17,8 @@ Gem::Specification.new do |s|
   s.summary = %q{Add Kerberos support to Net::SSH}
 
   s.add_dependency 'net-ssh', '>= 2.0'
-  s.add_dependency 'gssapi', '~> 1.1.2'
-  s.add_development_dependency 'rspec'
+  s.add_dependency 'gssapi', '~> 1.2.0'
+  
+  s.add_development_dependency 'rake'
+  s.add_development_dependency 'rspec', "~> 3.0"
 end
-
