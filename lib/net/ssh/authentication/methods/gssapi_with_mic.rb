@@ -47,10 +47,16 @@ module Net
               return false
 	          end
 	          
-	          # Try to complete the handshake.
+	          # Try to complete the handshake
 	          gss = GSSAPI::Simple.new hostname
+            if delegated_credentials = session.options[:gss_delegated_credentials]
+              debug { "delegating gss credentials" }
+              debug { "delegated_credentials: #{delegated_credentials}" }
+              debug { "address :#{delegated_credentials.address_of}" }
+              #gss.instance_variable_set(:@context,delegated_credentials)
+            end
 
-              established = false
+            established = false
 			      debug { "gssapi-with-mic handshaking" }
 	          until established
 	            # :delegate => true always forwards tickets.  This may or may not be a good idea, and should really be a user-specified option.
@@ -146,10 +152,15 @@ module Net
                     buffer =  Net::SSH::Buffer.from(:string, session_id, :byte, USERAUTH_REQUEST,
                           :string, username, :string, next_service, :string, "gssapi-with-mic").to_s
                     mic = message.read_string
-                    debug { "got mic "}
-                    # gss.get_mic
+                    debug { "verifying mic" }
                     ok = gss_verify_mic(srv,buffer,mic)
-                    return ok
+                    debug { "mic verified: #{ok}" }
+                    delegated_credentials = srv.delegated_credentials
+                    debug { "delegated credentials: #{delegated_credentials}" }
+                    return ok && auth_logic.allow_kerberos?(username,srv,
+                      {:next_service => next_service,
+                       :auth_method => auth_method,
+                       :packet => packet, :method => self})
                 end
 
               when USERAUTH_GSSAPI_ERRTOK
