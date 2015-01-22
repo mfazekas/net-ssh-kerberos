@@ -2,6 +2,13 @@ require 'net/ssh/authentication/methods/abstract'
 require 'net/ssh/kerberos/constants'
 require 'gssapi'
 
+module GSSAPI
+  module LibGSSAPI
+    # OM_uint32 gss_verify_mic (OM_uint32          *minor_status,const gss_ctx_id_t context_handle, const gss_buffer_t message_buffer,const gss_buffer_t token_buffer, gss_qop_t          qop_state)
+    attach_function :gss_verify_mic, [:pointer, :pointer, :pointer, :pointer, :OM_uint32], :OM_uint32
+  end
+end
+
 module Net
   module SSH
     module Authentication
@@ -91,6 +98,74 @@ module Net
 	            else
 	              raise Net::SSH::Exception, "unexpected server response to USERAUTH_REQUEST: #{message.type} (#{message.inspect})"
 	          end
+          end
+
+          def self.supports_server?
+            true
+          end
+
+          def server_authenticate(username,next_service,auth_method,packet,auth_logic)
+            #flag = packet.read_bool
+            #puts "flag:#{flag}"
+            mechs = packet.read_long
+            found = nil
+            (0...mechs).each do |mechi|
+              oid = packet.read_string.force_encoding(Encoding::ASCII_8BIT)
+              if oid[0] == SSH_GSS_OIDTYPE && oid[1].ord == oid.bytesize-2
+                mech = oid[2..-1]
+                if mech == GSS_KRB5_MECH.force_encoding(Encoding::ASCII_8BIT)
+                  found = mech
+                else
+                  error { "unrecognized mech:#{mech} only #{GSS_KRB5_MECH.force_encoding(Encoding::ASCII_8BIT)} supported" }
+                end
+              else
+                error { "unepxected oid:#{oid} #{oid[0].ord} #{oid[1].ord} #{oid.bytesize}" }
+              end
+            end
+            return false unless found
+
+            srv = GSSAPI::Simple.new(@options[:gss_server_host], @options[:gss_server_service], @options[:gss_server_keytab])
+            srv.acquire_credentials
+
+            resp = Buffer.from(:byte,USERAUTH_GSSAPI_RESPONSE)
+            supported_oid = (SSH_GSS_OIDTYPE + found.length.chr + found).force_encoding(Encoding::ASCII_8BIT)
+            resp.write_string(supported_oid)
+            session.send_message resp
+
+            message = session.next_message
+            case message.type
+              when USERAUTH_GSSAPI_TOKEN
+                debug { "USERAUTH_GSSAPI_TOKEN => feed to accept_context"}
+                token = message.read_string
+                otok = srv.accept_context(token)
+                debug { "accept_context done sending reply "}
+                session.send_message Net::SSH::Buffer.from(:byte, USERAUTH_GSSAPI_TOKEN, :string, otok)
+                message = session.next_message
+                case message.type
+                  when USERAUTH_GSSAPI_MIC
+                    buffer =  Net::SSH::Buffer.from(:string, session_id, :byte, USERAUTH_REQUEST,
+                          :string, username, :string, next_service, :string, "gssapi-with-mic").to_s
+                    mic = message.read_string
+                    debug { "got mic "}
+                    # gss.get_mic
+                    ok = gss_verify_mic(srv,buffer,mic)
+                    return ok
+                end
+
+              when USERAUTH_GSSAPI_ERRTOK
+            end
+          end
+
+          def gss_verify_mic(srv,data,mic)
+            min_stat = FFI::MemoryPointer.new :OM_uint32
+            in_buff = GSSAPI::LibGSSAPI::UnManagedGssBufferDesc.new
+            in_buff.value = data
+            mic_buff = GSSAPI::LibGSSAPI::UnManagedGssBufferDesc.new
+            mic_buff.value = mic
+            maj_stat = GSSAPI::LibGSSAPI.gss_verify_mic(min_stat, srv.context,
+                        in_buff.pointer, mic_buff.pointer, 0)
+            raise GssApiError.new(maj_stat, min_stat), "Failed to gss_get_mic" if maj_stat != 0
+            return (maj_stat == 0)
           end
 
           private

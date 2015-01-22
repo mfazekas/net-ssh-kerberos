@@ -21,6 +21,8 @@ module Net; module SSH; module Kerberos
     # GSSAPI constant OID(s)
 	  GSS_KRB5_MECH = "\x2a\x86\x48\x86\xf7\x12\x01\x02\x02"
 	  GSS_KRB5_MECH_USER2USER = "\x2a\x86\x48\x86\xf7\x12\x01\x02\x02\x03"
+
+    SSH_GSS_OIDTYPE = "\x06"
   end
 end; end; end
 
