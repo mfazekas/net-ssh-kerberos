@@ -47,20 +47,21 @@ module Net
               return false
 	          end
 	          
+            options = {}
 	          # Try to complete the handshake
 	          gss = GSSAPI::Simple.new hostname
             if delegated_credentials = session.options[:gss_delegated_credentials]
               debug { "delegating gss credentials" }
               debug { "delegated_credentials: #{delegated_credentials}" }
               debug { "address :#{delegated_credentials.address_of}" }
-              #gss.instance_variable_set(:@context,delegated_credentials)
+              options.merge!(:credentials => delegated_credentials)
             end
 
             established = false
 			      debug { "gssapi-with-mic handshaking" }
 	          until established
 	            # :delegate => true always forwards tickets.  This may or may not be a good idea, and should really be a user-specified option.
-	            token = gss.init_context(token, :delegate => true)
+	            token = gss.init_context(token, options.merge(:delegate => true))
 	            break if token === true
 	            if token && token.length > 0
 					      send_message Net::SSH::Buffer.from(:byte, USERAUTH_GSSAPI_TOKEN, :string, token)
@@ -153,7 +154,7 @@ module Net
                           :string, username, :string, next_service, :string, "gssapi-with-mic").to_s
                     mic = message.read_string
                     debug { "verifying mic" }
-                    ok = gss_verify_mic(srv,buffer,mic)
+                    ok = srv.verify_mic(buffer,mic)
                     debug { "mic verified: #{ok}" }
                     delegated_credentials = srv.delegated_credentials
                     debug { "delegated credentials: #{delegated_credentials}" }
@@ -165,18 +166,6 @@ module Net
 
               when USERAUTH_GSSAPI_ERRTOK
             end
-          end
-
-          def gss_verify_mic(srv,data,mic)
-            min_stat = FFI::MemoryPointer.new :OM_uint32
-            in_buff = GSSAPI::LibGSSAPI::UnManagedGssBufferDesc.new
-            in_buff.value = data
-            mic_buff = GSSAPI::LibGSSAPI::UnManagedGssBufferDesc.new
-            mic_buff.value = mic
-            maj_stat = GSSAPI::LibGSSAPI.gss_verify_mic(min_stat, srv.context,
-                        in_buff.pointer, mic_buff.pointer, 0)
-            raise GssApiError.new(maj_stat, min_stat), "Failed to gss_get_mic" if maj_stat != 0
-            return (maj_stat == 0)
           end
 
           private
